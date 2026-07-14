@@ -1,28 +1,22 @@
-import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
+import { Maximize2Icon, Minimize2Icon, PanelRightIcon } from "lucide-react";
+import { motion } from "motion/react";
 import { memo } from "react";
 
+import { motionSpringSnappy } from "~/lib/motion";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 interface PanelLayoutControlsProps {
-  terminalAvailable: boolean;
-  terminalOpen: boolean;
-  terminalShortcutLabel: string | null;
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
-  onToggleTerminal: () => void;
   onToggleRightPanel: () => void;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
-  terminalAvailable,
-  terminalOpen,
-  terminalShortcutLabel,
   rightPanelAvailable,
   rightPanelOpen,
   rightPanelShortcutLabel,
-  onToggleTerminal,
   onToggleRightPanel,
 }: PanelLayoutControlsProps) {
   return (
@@ -33,39 +27,26 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       <Tooltip>
         <TooltipTrigger
           render={
-            <Toggle
-              className="shrink-0 [-webkit-app-region:no-drag]"
-              pressed={terminalOpen}
-              onPressedChange={onToggleTerminal}
-              aria-label="Toggle terminal drawer"
-              variant="ghost"
-              size="sm"
-              disabled={!terminalAvailable}
+            <motion.div
+              layout
+              transition={motionSpringSnappy}
+              animate={{
+                scale: rightPanelOpen ? 1 : 0.96,
+                opacity: rightPanelAvailable ? 1 : 0.45,
+              }}
             >
-              <PanelBottomIcon className="size-3.5" />
-            </Toggle>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {terminalAvailable
-            ? `Toggle terminal drawer${terminalShortcutLabel ? ` (${terminalShortcutLabel})` : ""}`
-            : "Terminal drawer is unavailable"}
-        </TooltipPopup>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              className="shrink-0 [-webkit-app-region:no-drag]"
-              pressed={rightPanelOpen}
-              onPressedChange={onToggleRightPanel}
-              aria-label="Toggle right panel"
-              variant="ghost"
-              size="sm"
-              disabled={!rightPanelAvailable}
-            >
-              <PanelRightIcon className="size-3.5" />
-            </Toggle>
+              <Toggle
+                className="shrink-0 [-webkit-app-region:no-drag]"
+                pressed={rightPanelOpen}
+                onPressedChange={onToggleRightPanel}
+                aria-label="Toggle right panel"
+                variant="ghost"
+                size="sm"
+                disabled={!rightPanelAvailable}
+              >
+                <PanelRightIcon />
+              </Toggle>
+            </motion.div>
           }
         />
         <TooltipPopup side="bottom">

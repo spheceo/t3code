@@ -85,6 +85,14 @@ Checkout their getting started guide for more information: https://viteplus.dev/
 vp i
 ```
 
+### Run the desktop app (dev)
+
+```bash
+vp run dev:desktop
+```
+
+This monorepo is scoped to the desktop product: `apps/desktop`, `apps/server`, and `apps/web` (renderer), plus shared packages.
+
 Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
 
 Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).

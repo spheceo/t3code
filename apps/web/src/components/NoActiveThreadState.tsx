@@ -1,44 +1,41 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
+import { useEffect, useRef } from "react";
+
+import { useCreateScratchChat } from "../hooks/useCreateScratchChat";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { SidebarInset } from "./ui/sidebar";
-import { isElectron } from "../env";
-import { cn } from "~/lib/utils";
-import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
+/**
+ * Landing surface when no thread is selected. Opens a blank draft chat
+ * (composer + empty hero) instead of a static empty-state card.
+ */
 export function NoActiveThreadState() {
-  return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <header
-          className={cn(
-            "border-b border-border px-3 transition-[padding-left] duration-200 ease-linear motion-reduce:transition-none sm:px-5",
-            isElectron ? "workspace-topbar drag-region" : "workspace-topbar",
-            COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
-          )}
-        >
-          {isElectron ? (
-            <span className="text-xs text-muted-foreground/50 wco:pr-[var(--workspace-native-controls-inset)]">
-              No active thread
-            </span>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground md:text-muted-foreground/60">
-                No active thread
-              </span>
-            </div>
-          )}
-        </header>
+  const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
+    useHandleNewThread();
+  const createScratchChat = useCreateScratchChat();
+  const startedRef = useRef(false);
 
-        <Empty className="flex-1">
-          <div className="w-full max-w-lg px-8 py-12">
-            <EmptyHeader className="max-w-none">
-              <EmptyTitle className="text-foreground text-xl">Pick a thread to continue</EmptyTitle>
-              <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
-                Select an existing thread or create a new one to get started.
-              </EmptyDescription>
-            </EmptyHeader>
-          </div>
-        </Empty>
-      </div>
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    void (async () => {
+      const opened = await startNewThreadFromContext({
+        activeDraftThread,
+        activeThread: activeThread ?? undefined,
+        defaultProjectRef,
+        handleNewThread,
+      });
+      if (!opened) {
+        await createScratchChat();
+      }
+    })();
+  }, [activeDraftThread, activeThread, createScratchChat, defaultProjectRef, handleNewThread]);
+
+  // Brief shell while the draft route mounts (matches chat chrome).
+  return (
+    <SidebarInset className="min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground max-md:h-dvh">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background" />
     </SidebarInset>
   );
 }

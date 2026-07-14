@@ -2,10 +2,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import type { ServerProvider } from "@t3tools/contracts";
 import { CircleCheckIcon, DownloadIcon, LoaderIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { primaryServerProvidersAtom } from "../../state/server";
+import { primaryServerProvidersAtom, serverEnvironment } from "../../state/server";
+import { usePrimaryEnvironment } from "../../state/environments";
+import { useAtomCommand } from "../../state/use-atom-command";
 import {
+  canOneClickUpdateProviderCandidate,
+  collectProviderUpdateCandidates,
   getProviderUpdateSidebarPillView,
   type ProviderUpdateSidebarPillView,
 } from "../ProviderUpdateLaunchNotification.logic";
@@ -41,6 +45,11 @@ function latestProviderCheckedAt(
 export function SidebarProviderUpdatePill() {
   const navigate = useNavigate();
   const providers = useAtomValue(primaryServerProvidersAtom);
+  const primaryEnvironment = usePrimaryEnvironment();
+  const updateProvider = useAtomCommand(serverEnvironment.updateProvider, {
+    reportFailure: false,
+  });
+  const updateInFlightRef = useRef(false);
   const [dismissedKeys, setDismissedKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [renderedView, setRenderedView] = useState<ProviderUpdateSidebarPillView | null>(null);
   const [pendingView, setPendingView] = useState<ProviderUpdateSidebarPillView | null>(null);
@@ -55,15 +64,85 @@ export function SidebarProviderUpdatePill() {
     dismissedKeys,
   });
 
+  const oneClickProviders = useMemo(
+    () =>
+      collectProviderUpdateCandidates(providers).filter((provider) =>
+        canOneClickUpdateProviderCandidate(provider, providers),
+      ),
+    [providers],
+  );
+
   useEffect(() => {
     if (visibleAfterIso === undefined && effectiveVisibleAfterIso !== undefined) {
       setVisibleAfterIso(effectiveVisibleAfterIso);
     }
   }, [effectiveVisibleAfterIso, visibleAfterIso]);
 
+  // Clear the local in-flight guard once provider state reflects an active or terminal update.
+  useEffect(() => {
+    if (!updateInFlightRef.current) {
+      return;
+    }
+    const hasActiveOrRecentTerminal = providers.some(
+      (provider) =>
+        provider.updateState?.status === "running" ||
+        provider.updateState?.status === "succeeded" ||
+        provider.updateState?.status === "failed" ||
+        provider.updateState?.status === "unchanged",
+    );
+    if (hasActiveOrRecentTerminal || oneClickProviders.length === 0) {
+      updateInFlightRef.current = false;
+    }
+  }, [oneClickProviders.length, providers]);
+
   const openProviderSettings = useCallback(() => {
-    void navigate({ to: "/settings/providers" });
+    void navigate({ to: "/settings/models" });
   }, [navigate]);
+
+  const handleMainClick = useCallback(() => {
+    const displayed = renderedView ?? view;
+    // Only the available-updates prompt runs updates; progress / result states open settings.
+    if (!displayed || displayed.tone === "loading" || !displayed.key.startsWith("available:")) {
+      openProviderSettings();
+      return;
+    }
+
+    if (oneClickProviders.length === 0 || !primaryEnvironment) {
+      openProviderSettings();
+      return;
+    }
+
+    if (updateInFlightRef.current) {
+      return;
+    }
+    updateInFlightRef.current = true;
+
+    void (async () => {
+      try {
+        for (const provider of oneClickProviders) {
+          await updateProvider({
+            environmentId: primaryEnvironment.environmentId,
+            input: {
+              provider: provider.driver,
+              instanceId: provider.instanceId,
+            },
+          });
+        }
+      } finally {
+        // Provider atom updates drive loading/success/error pill states.
+        // Guard is also cleared by the effect when updateState appears.
+        updateInFlightRef.current = false;
+      }
+    })();
+  }, [
+    oneClickProviders,
+    openProviderSettings,
+    primaryEnvironment,
+    renderedView,
+    updateProvider,
+    view,
+  ]);
+
   const displayedView = renderedView ?? view;
   const dismissAfterVisibleMs = displayedView?.dismissAfterVisibleMs;
   const viewKey = displayedView?.key ?? null;
@@ -71,6 +150,14 @@ export function SidebarProviderUpdatePill() {
     dismissAfterVisibleMs !== undefined &&
     displayedView?.tone !== "loading" &&
     exitingKey !== viewKey;
+  const isAvailableUpdate = displayedView?.key.startsWith("available:") ?? false;
+  const canRunUpdate =
+    isAvailableUpdate && oneClickProviders.length > 0 && primaryEnvironment !== null;
+  const mainTooltip = canRunUpdate
+    ? displayedView?.description
+      ? `${displayedView.description} Click to update.`
+      : "Click to update."
+    : (displayedView?.description ?? "Open provider settings");
 
   const startExit = useCallback(
     (key: string, nextView: ProviderUpdateSidebarPillView | null, dismissKey?: string) => {
@@ -124,7 +211,7 @@ export function SidebarProviderUpdatePill() {
 
   return (
     <div
-      className={`group/provider-update relative flex h-7 w-full items-center overflow-hidden rounded-lg text-xs font-medium transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
+      className={`group/provider-update relative mb-0.5 flex h-7 w-full items-center overflow-hidden rounded-lg text-xs font-medium transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
         PROVIDER_UPDATE_PILL_STYLES[displayedView.tone]
       } ${
         exitingKey === displayedView.key
@@ -167,9 +254,13 @@ export function SidebarProviderUpdatePill() {
           render={
             <button
               type="button"
-              aria-label={displayedView.description}
-              className="provider-update-main relative z-[1] flex h-full flex-1 items-center gap-2 px-2 text-left"
-              onClick={openProviderSettings}
+              aria-label={
+                canRunUpdate
+                  ? `${displayedView.title}. Click to update.`
+                  : displayedView.description
+              }
+              className="provider-update-main relative z-[1] flex h-full flex-1 cursor-pointer items-center gap-2 px-2 text-left"
+              onClick={handleMainClick}
             >
               {displayedView.tone === "loading" ? (
                 <LoaderIcon className="size-3.5 animate-spin" />
@@ -180,11 +271,11 @@ export function SidebarProviderUpdatePill() {
               ) : (
                 <DownloadIcon className="size-3.5" />
               )}
-              <span>{displayedView.title}</span>
+              <span className="truncate">{displayedView.title}</span>
             </button>
           }
         />
-        <TooltipPopup side="top">{displayedView.description}</TooltipPopup>
+        <TooltipPopup side="top">{mainTooltip}</TooltipPopup>
       </Tooltip>
       {displayedView.dismissible && (
         <Tooltip>
@@ -193,7 +284,7 @@ export function SidebarProviderUpdatePill() {
               <button
                 type="button"
                 aria-label="Dismiss provider update notice"
-                className="relative z-[1] mr-1 inline-flex size-5 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
+                className="relative z-[1] mr-1 inline-flex size-5 cursor-pointer items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
                 onClick={() => startExit(displayedView.key, null, displayedView.key)}
               >
                 <XIcon className="size-3.5" />

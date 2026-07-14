@@ -2,9 +2,10 @@
 
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { ChevronRightIcon } from "lucide-react";
-import type * as React from "react";
+import * as React from "react";
 
 import { cn } from "~/lib/utils";
+import { useBaseUiMotion } from "~/lib/useBaseUiMotion";
 
 const MenuCreateHandle = MenuPrimitive.createHandle;
 
@@ -36,6 +37,12 @@ function MenuPopup({
   side?: MenuPrimitive.Positioner.Props["side"];
   anchor?: MenuPrimitive.Positioner.Props["anchor"];
 }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  useBaseUiMotion(ref, {
+    open: { opacity: 1, scale: 1 },
+    closed: { opacity: 0, scale: 0.98 },
+  });
+
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
@@ -48,8 +55,9 @@ function MenuPopup({
         sideOffset={sideOffset}
       >
         <MenuPrimitive.Popup
+          ref={ref}
           className={cn(
-            "relative flex not-[class*='w-']:min-w-32 origin-(--transform-origin) rounded-lg border bg-popover not-dark:bg-clip-padding shadow-lg/5 outline-none before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus:outline-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+            "relative flex not-[class*='w-']:min-w-32 origin-(--transform-origin) rounded-lg border bg-popover not-dark:bg-clip-padding shadow-lg/5 outline-none will-change-[opacity,transform] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus:outline-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
             className,
           )}
           data-slot="menu-popup"

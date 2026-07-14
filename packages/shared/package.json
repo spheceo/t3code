@@ -23,6 +23,10 @@
       "types": "./src/sourceControl.ts",
       "import": "./src/sourceControl.ts"
     },
+    "./scratchChat": {
+      "types": "./src/scratchChat.ts",
+      "import": "./src/scratchChat.ts"
+    },
     "./logging": {
       "types": "./src/logging.ts",
       "import": "./src/logging.ts"

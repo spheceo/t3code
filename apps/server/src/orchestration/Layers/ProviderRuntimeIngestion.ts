@@ -2,6 +2,7 @@ import {
   ApprovalRequestId,
   type AssistantDeliveryMode,
   CommandId,
+  EventId,
   MessageId,
   type OrchestrationEvent,
   type OrchestrationMessage,
@@ -664,6 +665,13 @@ const make = Effect.gen(function* () {
     capacity: BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY,
     timeToLive: BUFFERED_PROPOSED_PLAN_BY_ID_TTL,
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
+  });
+
+  // Accumulated model thinking/reasoning text keyed by thread:turn.
+  const bufferedReasoningTextByTurnKey = yield* Cache.make<string, string>({
+    capacity: TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
+    timeToLive: TURN_MESSAGE_IDS_BY_TURN_TTL,
+    lookup: () => Effect.succeed(""),
   });
 
   const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (threadId: ThreadId) {
@@ -1362,8 +1370,52 @@ const make = Effect.gen(function* () {
         event.type === "content.delta" && event.payload.streamKind === "assistant_text"
           ? event.payload.delta
           : undefined;
+      const reasoningDelta =
+        event.type === "content.delta" &&
+        (event.payload.streamKind === "reasoning_text" ||
+          event.payload.streamKind === "reasoning_summary_text")
+          ? event.payload.delta
+          : undefined;
       const proposedPlanDelta =
         event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
+
+      // Stream model thinking/reasoning into a replaceable activity so the UI
+      // can show a live "Thinking" transcript while the turn runs.
+      if (reasoningDelta && reasoningDelta.length > 0) {
+        const turnId = toTurnId(event.turnId);
+        if (turnId) {
+          const reasoningKey = providerTurnKey(thread.id, turnId);
+          const existing = yield* Cache.getOption(bufferedReasoningTextByTurnKey, reasoningKey);
+          const nextText = Option.match(existing, {
+            onNone: () => reasoningDelta,
+            onSome: (text) => `${text}${reasoningDelta}`,
+          });
+          // Cap memory: keep the last ~32k chars of thinking if the model is verbose.
+          const cappedText =
+            nextText.length > 32_000 ? nextText.slice(nextText.length - 32_000) : nextText;
+          yield* Cache.set(bufferedReasoningTextByTurnKey, reasoningKey, cappedText);
+          yield* orchestrationEngine.dispatch({
+            type: "thread.activity.append",
+            commandId: yield* providerCommandId(event, "reasoning-activity"),
+            threadId: thread.id,
+            activity: {
+              id: EventId.make(`reasoning:${thread.id}:${turnId}`),
+              tone: "info",
+              kind: "reasoning.delta",
+              summary: "Thinking",
+              payload: {
+                taskId: `reasoning:${turnId}`,
+                text: cappedText,
+                detail: cappedText,
+                summary: "Thinking",
+              },
+              turnId,
+              createdAt: now,
+            },
+            createdAt: now,
+          });
+        }
+      }
 
       if (assistantDelta && assistantDelta.length > 0) {
         const turnId = toTurnId(event.turnId);

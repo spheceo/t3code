@@ -136,7 +136,7 @@ export type MessagesTimelineRow =
       createdAt: string;
       proposedPlan: ProposedPlan;
     }
-  | { kind: "working"; id: string; createdAt: string | null };
+  | { kind: "working"; id: string; createdAt: string | null; thinkingText: string | null };
 
 export interface StableMessagesTimelineRowsState {
   byId: Map<string, MessagesTimelineRow>;
@@ -240,8 +240,9 @@ function deriveUnsettledTurnId(
 
 /**
  * Settled turns fold their commentary and tool activity behind a
- * "Worked for ..." row anchored at the turn's first foldable entry; the
- * terminal assistant message stays visible below the fold.
+ * "Worked for ..." row anchored immediately above the terminal assistant
+ * message so the fold never appears above the user message that started the
+ * turn (timestamp noise can otherwise put intermediate entries first).
  */
 function deriveTurnFolds(input: {
   timelineEntries: ReadonlyArray<TimelineEntry>;
@@ -311,20 +312,31 @@ function deriveTurnFolds(input: {
     if (group.hasStreamingMessage) {
       continue;
     }
-    const hiddenEntryIds = new Set<string>();
-    for (const entry of group.entries) {
-      if (entry.id !== group.terminalEntry?.id) {
-        hiddenEntryIds.add(entry.id);
-      }
-    }
-    if (hiddenEntryIds.size === 0) {
-      continue;
-    }
-
     const firstEntry = group.entries[0];
     const lastEntry = group.entries.at(-1);
     if (!firstEntry || !lastEntry) {
       continue;
+    }
+    // Prefer anchoring on the terminal assistant message so the fold sits
+    // immediately above the final agent reply. Tool-only turns (no terminal
+    // message) fall back to the first foldable entry.
+    const anchorEntry = group.terminalEntry ?? firstEntry;
+    const hiddenEntryIds = new Set<string>();
+    if (group.terminalEntry) {
+      for (const entry of group.entries) {
+        if (entry.id !== group.terminalEntry.id) {
+          hiddenEntryIds.add(entry.id);
+        }
+      }
+      // Single terminal assistant message with nothing to fold — skip.
+      if (hiddenEntryIds.size === 0) {
+        continue;
+      }
+    } else {
+      // Tool-only: the fold stands in for every entry in the group.
+      for (const entry of group.entries) {
+        hiddenEntryIds.add(entry.id);
+      }
     }
 
     const isLatestInterruptedTurn =
@@ -352,10 +364,10 @@ function deriveTurnFolds(input: {
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorEntryId.set(firstEntry.id, {
+    foldsByAnchorEntryId.set(anchorEntry.id, {
       turnId,
-      anchorEntryId: firstEntry.id,
-      createdAt: firstEntry.createdAt,
+      anchorEntryId: anchorEntry.id,
+      createdAt: anchorEntry.createdAt,
       hiddenEntryIds,
       label,
     });
@@ -371,6 +383,7 @@ export function deriveMessagesTimelineRows(input: {
   expandedWorkGroupIds?: ReadonlySet<string>;
   isWorking: boolean;
   activeTurnStartedAt: string | null;
+  thinkingText?: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
 }): MessagesTimelineRow[] {
@@ -524,11 +537,12 @@ export function deriveMessagesTimelineRows(input: {
     });
   }
 
-  if (input.isWorking) {
+  if (input.isWorking || (input.thinkingText && input.thinkingText.trim().length > 0)) {
     nextRows.push({
       kind: "working",
       id: "working-indicator-row",
       createdAt: input.activeTurnStartedAt,
+      thinkingText: input.thinkingText?.trim() ? input.thinkingText : null,
     });
   }
 
@@ -560,8 +574,10 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
   if (a.kind !== b.kind || a.id !== b.id) return false;
 
   switch (a.kind) {
-    case "working":
-      return a.createdAt === (b as typeof a).createdAt;
+    case "working": {
+      const bw = b as typeof a;
+      return a.createdAt === bw.createdAt && a.thinkingText === bw.thinkingText;
+    }
 
     case "turn-fold": {
       const bf = b as typeof a;

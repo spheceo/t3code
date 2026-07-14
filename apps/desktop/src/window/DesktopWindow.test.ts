@@ -11,6 +11,11 @@ import { vi } from "vite-plus/test";
 
 vi.mock("electron", async (importOriginal) => ({
   ...(await importOriginal<typeof import("electron")>()),
+  screen: {
+    getPrimaryDisplay: () => ({
+      workArea: { x: 0, y: 0, width: 1440, height: 900 },
+    }),
+  },
   session: {
     fromPartition: vi.fn(() => ({
       getUserAgent: vi.fn(() => "Mozilla/5.0 Electron/41.5.0 t3code/1.2.3"),
@@ -333,7 +338,10 @@ describe("DesktopWindow", () => {
         assert.isTrue(createdWindowOptions[0]?.disableAutoHideCursor);
         assert.deepEqual(fakeWindow.setAutoHideCursor.mock.calls, [[false]]);
         assert.deepEqual(fakeWindow.loadURL.mock.calls[0], ["t3code-dev://app/"]);
-        assert.equal(fakeWindow.openDevTools.mock.calls.length, 1);
+        // DevTools stay closed on launch; open via View → Toggle Developer Tools.
+        assert.equal(fakeWindow.openDevTools.mock.calls.length, 0);
+        assert.equal(createdWindowOptions[0]?.width, 1440);
+        assert.equal(createdWindowOptions[0]?.height, 900);
       }).pipe(Effect.provide(layer));
     }),
   );
@@ -472,7 +480,7 @@ describe("DesktopWindow", () => {
 
           // 3. Activating must not mistake the splash for the main window: it
           //    retries the open and brings up the real main instead of leaving
-          //    the user stranded on "Connecting to WSL".
+          //    the user stranded on the startup splash.
           yield* desktopWindow.activate;
           assert.equal(yield* Ref.get(scenario.createCalls), 3);
           const registeredMain = yield* Ref.get(scenario.mainWindow);

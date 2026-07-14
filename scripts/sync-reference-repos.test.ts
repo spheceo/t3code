@@ -8,7 +8,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
-import { referenceRepos } from "./lib/reference-repos.ts";
+import { referenceRepos, type ReferenceRepo } from "./lib/reference-repos.ts";
 import {
   planReferenceRepoSync,
   resolveReferenceRepoRef,
@@ -17,7 +17,16 @@ import {
 
 const encoder = new TextEncoder();
 const effectSmol = referenceRepos[0]!;
-const alchemyEffect = referenceRepos[1]!;
+// Fixture for package.json-style version resolution (no longer a real reference repo).
+const packageJsonVersionRepo = {
+  id: "package-json-version-fixture",
+  prefix: ".repos/package-json-version-fixture",
+  repository: "https://example.com/fixture.git",
+  latestRef: "main",
+  versionSourcePath: "fixtures/package.json",
+  packageVersionPath: ["dependencies", "alchemy"],
+  versionTagPrefix: "v",
+} satisfies ReferenceRepo;
 
 function mockHandle(
   options: {
@@ -121,17 +130,19 @@ it.layer(NodeServices.layer)("sync-reference-repos", (it) => {
       const rootDir = yield* fs.makeTempDirectoryScoped({
         prefix: "sync-reference-repos-parse-error-",
       });
-      const sourcePath = path.join(rootDir, alchemyEffect.versionSourcePath);
+      const sourcePath = path.join(rootDir, packageJsonVersionRepo.versionSourcePath);
       yield* fs.makeDirectory(path.dirname(sourcePath), { recursive: true });
       yield* fs.writeFileString(sourcePath, "{");
 
-      const error = yield* resolveReferenceRepoRef(alchemyEffect, rootDir, false).pipe(Effect.flip);
+      const error = yield* resolveReferenceRepoRef(packageJsonVersionRepo, rootDir, false).pipe(
+        Effect.flip,
+      );
 
       if (error._tag !== "ReferenceRepoVersionSourceError") {
         assert.fail(`Unexpected error: ${error._tag}`);
       }
       assert.equal(error.operation, "parse");
-      assert.equal(error.repoId, alchemyEffect.id);
+      assert.equal(error.repoId, packageJsonVersionRepo.id);
       assert.equal(error.sourcePath, sourcePath);
       assert.ok(error.cause !== undefined);
       assert.ok(!error.message.includes(String((error.cause as Error).message)));
@@ -145,36 +156,39 @@ it.layer(NodeServices.layer)("sync-reference-repos", (it) => {
       const rootDir = yield* fs.makeTempDirectoryScoped({
         prefix: "sync-reference-repos-resolution-error-",
       });
-      const sourcePath = path.join(rootDir, alchemyEffect.versionSourcePath);
+      const sourcePath = path.join(rootDir, packageJsonVersionRepo.versionSourcePath);
       yield* fs.makeDirectory(path.dirname(sourcePath), { recursive: true });
       yield* fs.writeFileString(sourcePath, '{"dependencies":{}}');
 
-      const error = yield* resolveReferenceRepoRef(alchemyEffect, rootDir, false).pipe(Effect.flip);
+      const error = yield* resolveReferenceRepoRef(packageJsonVersionRepo, rootDir, false).pipe(
+        Effect.flip,
+      );
 
       if (error._tag !== "ReferenceRepoVersionResolutionError") {
         assert.fail(`Unexpected error: ${error._tag}`);
       }
-      assert.equal(error.repoId, alchemyEffect.id);
+      assert.equal(error.repoId, packageJsonVersionRepo.id);
       assert.equal(error.sourcePath, sourcePath);
       assert.deepStrictEqual(error.packageVersionPath, ["dependencies", "alchemy"]);
       assert.ok(!("cause" in error));
     }),
   );
 
-  it.effect("resolves the alchemy-effect tag from the relay package", () =>
+  it.effect("resolves a package.json dependency tag with a version prefix", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const rootDir = yield* fs.makeTempDirectoryScoped({
-        prefix: "sync-reference-repos-alchemy-version-",
+        prefix: "sync-reference-repos-package-version-",
       });
-      yield* fs.makeDirectory(path.join(rootDir, "infra", "relay"), { recursive: true });
-      yield* fs.writeFileString(
-        path.join(rootDir, "infra", "relay", "package.json"),
-        '{"dependencies":{"alchemy":"2.0.0-beta.49"}}',
-      );
+      const sourcePath = path.join(rootDir, packageJsonVersionRepo.versionSourcePath);
+      yield* fs.makeDirectory(path.dirname(sourcePath), { recursive: true });
+      yield* fs.writeFileString(sourcePath, '{"dependencies":{"alchemy":"2.0.0-beta.49"}}');
 
-      assert.equal(yield* resolveReferenceRepoRef(alchemyEffect, rootDir, false), "v2.0.0-beta.49");
+      assert.equal(
+        yield* resolveReferenceRepoRef(packageJsonVersionRepo, rootDir, false),
+        "v2.0.0-beta.49",
+      );
     }),
   );
 
@@ -251,7 +265,7 @@ it.layer(NodeServices.layer)("sync-reference-repos", (it) => {
         assert.fail(`Unexpected error: ${error._tag}`);
       }
       assert.equal(error.repoId, "missing");
-      assert.deepStrictEqual(error.expectedRepoIds, ["effect-smol", "alchemy-effect"]);
+      assert.deepStrictEqual(error.expectedRepoIds, ["effect-smol"]);
       assert.ok(!("cause" in error));
     }),
   );

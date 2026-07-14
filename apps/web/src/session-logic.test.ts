@@ -1537,6 +1537,118 @@ describe("deriveTimelineEntries", () => {
       },
     });
   });
+
+  it("keeps user messages before assistant replies when timestamps invert", () => {
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.make("assistant-1"),
+          role: "assistant",
+          text: "I can help.",
+          createdAt: "2026-02-23T00:00:01.000Z",
+          turnId: TurnId.make("turn-1"),
+          updatedAt: "2026-02-23T00:00:01.000Z",
+          streaming: false,
+        },
+        {
+          id: MessageId.make("user-1"),
+          role: "user",
+          text: "Can you make changes?",
+          createdAt: "2026-02-23T00:00:02.000Z",
+          turnId: TurnId.make("turn-1"),
+          updatedAt: "2026-02-23T00:00:02.000Z",
+          streaming: false,
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(entries.map((entry) => (entry.kind === "message" ? entry.message.role : entry.kind))).toEqual(
+      ["user", "assistant"],
+    );
+  });
+
+  it("keeps a later follow-up user message after the prior turn assistant reply", () => {
+    // user @ t=0 turn-1, assistant @ t=5s turn-1, user @ t=30s turnId null (or turn-2)
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.make("user-1"),
+          role: "user",
+          text: "first",
+          createdAt: "2026-02-23T00:00:00.000Z",
+          turnId: TurnId.make("turn-1"),
+          updatedAt: "2026-02-23T00:00:00.000Z",
+          streaming: false,
+        },
+        {
+          id: MessageId.make("assistant-1"),
+          role: "assistant",
+          text: "reply",
+          createdAt: "2026-02-23T00:00:05.000Z",
+          turnId: TurnId.make("turn-1"),
+          updatedAt: "2026-02-23T00:00:05.000Z",
+          streaming: false,
+        },
+        {
+          id: MessageId.make("user-2"),
+          role: "user",
+          text: "follow up",
+          createdAt: "2026-02-23T00:00:30.000Z",
+          turnId: null,
+          updatedAt: "2026-02-23T00:00:30.000Z",
+          streaming: false,
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(
+      entries.map((entry) => (entry.kind === "message" ? entry.message.id : entry.kind)),
+    ).toEqual([MessageId.make("user-1"), MessageId.make("assistant-1"), MessageId.make("user-2")]);
+  });
+
+  it("keeps a later follow-up user message after the prior turn when it has turn-2", () => {
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.make("user-1"),
+          role: "user",
+          text: "first",
+          createdAt: "2026-02-23T00:00:00.000Z",
+          turnId: TurnId.make("turn-1"),
+          updatedAt: "2026-02-23T00:00:00.000Z",
+          streaming: false,
+        },
+        {
+          id: MessageId.make("assistant-1"),
+          role: "assistant",
+          text: "reply",
+          createdAt: "2026-02-23T00:00:05.000Z",
+          turnId: TurnId.make("turn-1"),
+          updatedAt: "2026-02-23T00:00:05.000Z",
+          streaming: false,
+        },
+        {
+          id: MessageId.make("user-2"),
+          role: "user",
+          text: "follow up",
+          createdAt: "2026-02-23T00:00:30.000Z",
+          turnId: TurnId.make("turn-2"),
+          updatedAt: "2026-02-23T00:00:30.000Z",
+          streaming: false,
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(
+      entries.map((entry) => (entry.kind === "message" ? entry.message.role : entry.kind)),
+    ).toEqual(["user", "assistant", "user"]);
+  });
 });
 
 describe("deriveWorkLogEntries context window handling", () => {

@@ -35,6 +35,8 @@ export const ModelListRow = memo(function ModelListRow(props: {
   showNewBadge?: boolean;
   jumpLabel?: string | null;
   disabledReason?: string | null;
+  /** Tighter padding for compact pickers (e.g. composer model menu). */
+  compact?: boolean;
   onToggleFavorite: () => void;
 }) {
   const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
@@ -48,16 +50,17 @@ export const ModelListRow = memo(function ModelListRow(props: {
       index={props.index}
       value={`${props.instanceId}:${props.model.slug}`}
       disabled={Boolean(props.disabledReason)}
-      contentClassName="flex w-full items-center gap-3"
+      contentClassName="flex w-full items-center gap-2.5"
       className={cn(
-        "group relative w-full !min-w-0 max-w-full cursor-pointer rounded-md px-2 py-2.5 transition-[background-color,box-shadow,color]",
+        "group relative w-full !min-w-0 max-w-full cursor-pointer rounded-md px-2 transition-[background-color,box-shadow,color]",
+        props.compact ? "py-1.5" : "py-2.5",
         "data-highlighted:bg-muted/56 data-selected:bg-transparent data-selected:text-foreground data-selected:ring-0",
         props.disabledReason &&
           "data-disabled:pointer-events-auto data-disabled:cursor-not-allowed data-disabled:hover:bg-transparent",
       )}
     >
       <div className="min-w-0 flex-1 text-left">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
           <div className="min-w-0 truncate text-xs font-medium leading-snug">
             {props.useTriggerLabel
               ? getTriggerDisplayModelLabel(props.model)
@@ -77,7 +80,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
           ) : null}
         </div>
         {props.showProvider && (
-          <div className="mt-1 flex items-center gap-1.5">
+          <div className={cn("flex items-center gap-1.5", props.compact ? "mt-0.5" : "mt-1")}>
             {ProviderIcon ? <ProviderIcon className="size-3 shrink-0" /> : null}
             <span className="truncate text-xs font-normal leading-snug text-muted-foreground/70">
               {providerLabel}

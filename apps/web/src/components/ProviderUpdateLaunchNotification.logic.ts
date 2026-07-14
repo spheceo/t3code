@@ -510,7 +510,7 @@ export function getProviderUpdateSidebarPillView(
     });
   }
 
-  return (
+  const terminalView =
     terminalCandidates
       .toSorted((left, right) => {
         const leftProviders =
@@ -529,8 +529,39 @@ export function getProviderUpdateSidebarPillView(
         const rightFinishedAt = latestFinishedAtForProviders(rightProviders) ?? "";
         return rightFinishedAt.localeCompare(leftFinishedAt);
       })
-      .find((candidate) => !options?.dismissedKeys?.has(candidate.key)) ?? null
-  );
+      .find((candidate) => !options?.dismissedKeys?.has(candidate.key)) ?? null;
+  if (terminalView) {
+    return terminalView;
+  }
+
+  // Available updates — shown in the sidebar above Settings (not as a toast).
+  const availableProviders = collectProviderUpdateCandidates(dedupedProviders);
+  if (availableProviders.length === 0) {
+    return null;
+  }
+  const availableKey = `available:${availableProviders
+    .map((provider) => `${provider.driver}:${provider.versionAdvisory.latestVersion}`)
+    .toSorted()
+    .join("|")}`;
+  if (options?.dismissedKeys?.has(availableKey)) {
+    return null;
+  }
+  const availableProvider = availableProviders[0]!;
+  const availableProviderName =
+    PROVIDER_DISPLAY_NAMES[availableProvider.driver] ?? availableProvider.driver;
+  return {
+    key: availableKey,
+    tone: "warning",
+    title:
+      availableProviders.length === 1
+        ? `Update ${availableProviderName}`
+        : `${availableProviders.length} updates`,
+    description:
+      availableProviders.length === 1
+        ? `${availableProviderName} ${formatVersion(availableProvider.versionAdvisory.latestVersion)} is available.`
+        : `${formatProviderList(availableProviders)} have updates available.`,
+    dismissible: true,
+  };
 }
 
 function getProviderUpdateInitialToastTitle(

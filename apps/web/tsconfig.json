@@ -9,7 +9,8 @@
     "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "lucide-react": ["./src/icons/lucide-react.tsx"]
     },
     "plugins": [
       {

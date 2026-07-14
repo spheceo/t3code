@@ -633,6 +633,7 @@ export function deriveWorkLogEntries(
     if (activity.kind === "tool.started") continue;
     if (activity.kind === "task.started") continue;
     if (activity.kind === "context-window.updated") continue;
+    if (activity.kind === "reasoning.delta") continue; // surfaced via deriveActiveThinkingText
     if (activity.summary === "Checkpoint captured") continue;
     if (isPlanBoundaryToolActivity(activity)) continue;
     entries.push(toDerivedWorkLogEntry(activity));
@@ -641,6 +642,34 @@ export function deriveWorkLogEntries(
     const { activityKind, collapseKey: _collapseKey, ...rest } = entry;
     return Object.assign(rest, { sourceActivityKind: activityKind });
   });
+}
+
+/**
+ * Latest streamed model-thinking transcript for the active turn (or any live
+ * reasoning activity when turn id is not yet known).
+ */
+export function deriveActiveThinkingText(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  activeTurnId: TurnId | null | undefined,
+): string | null {
+  const ordered = [...activities].toSorted(compareActivitiesByOrder);
+  let best: string | null = null;
+  for (const activity of ordered) {
+    if (activity.kind !== "reasoning.delta") continue;
+    if (activeTurnId && activity.turnId && activity.turnId !== activeTurnId) continue;
+    const payload =
+      activity.payload && typeof activity.payload === "object"
+        ? (activity.payload as Record<string, unknown>)
+        : null;
+    const text =
+      (typeof payload?.text === "string" && payload.text) ||
+      (typeof payload?.detail === "string" && payload.detail) ||
+      null;
+    if (text && text.trim().length > 0) {
+      best = text;
+    }
+  }
+  return best;
 }
 
 function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): boolean {
@@ -1337,12 +1366,45 @@ function compareActivityLifecycleRank(kind: string): number {
   return 1;
 }
 
+/**
+ * Timeline message order.
+ *
+ * Same-turn user/assistant pairs always keep conversational order (user first),
+ * even when provider timestamps invert. Across turns, trust createdAt so a later
+ * follow-up user message is not pulled above an earlier assistant reply.
+ */
+export function compareChatMessagesForTimeline(a: ChatMessage, b: ChatMessage): number {
+  // Same turn: always user → assistant regardless of timestamp noise.
+  if (a.turnId && a.turnId === b.turnId && a.role !== b.role) {
+    if (a.role === "user") return -1;
+    if (b.role === "user") return 1;
+  }
+
+  const timeCmp = a.createdAt.localeCompare(b.createdAt);
+  if (timeCmp !== 0) return timeCmp;
+
+  // Equal timestamps, different roles: keep user before assistant as a stable tiebreak.
+  if (a.role === "user" && b.role === "assistant") return -1;
+  if (a.role === "assistant" && b.role === "user") return 1;
+  return String(a.id).localeCompare(String(b.id));
+}
+
+function orderChatMessagesForTimeline(messages: ReadonlyArray<ChatMessage>): ChatMessage[] {
+  return [...messages].toSorted(compareChatMessagesForTimeline);
+}
+
+function timelineKindRank(kind: TimelineEntry["kind"]): number {
+  if (kind === "message") return 0;
+  if (kind === "work") return 1;
+  return 2;
+}
+
 export function deriveTimelineEntries(
   messages: ReadonlyArray<ChatMessage>,
   proposedPlans: ReadonlyArray<ProposedPlan>,
   workEntries: ReadonlyArray<WorkLogEntry>,
 ): TimelineEntry[] {
-  const messageRows: TimelineEntry[] = messages.map((message) => ({
+  const messageRows: TimelineEntry[] = orderChatMessagesForTimeline(messages).map((message) => ({
     id: message.id,
     kind: "message",
     createdAt: message.createdAt,
@@ -1360,9 +1422,20 @@ export function deriveTimelineEntries(
     createdAt: entry.createdAt,
     entry,
   }));
-  return [...messageRows, ...proposedPlanRows, ...workRows].toSorted((a, b) =>
-    a.createdAt.localeCompare(b.createdAt),
-  );
+  return [...messageRows, ...proposedPlanRows, ...workRows].toSorted((a, b) => {
+    // Keep user→assistant pairs together in conversation order even when
+    // assistant.createdAt is slightly earlier than the user message.
+    if (a.kind === "message" && b.kind === "message") {
+      return compareChatMessagesForTimeline(a.message, b.message);
+    }
+
+    const timeCmp = a.createdAt.localeCompare(b.createdAt);
+    if (timeCmp !== 0) return timeCmp;
+
+    const kindCmp = timelineKindRank(a.kind) - timelineKindRank(b.kind);
+    if (kindCmp !== 0) return kindCmp;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 export function inferCheckpointTurnCountByTurnId(

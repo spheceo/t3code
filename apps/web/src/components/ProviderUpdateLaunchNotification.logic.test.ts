@@ -677,13 +677,25 @@ describe("provider update launch notification logic", () => {
     });
   });
 
-  it("does not show a sidebar pill for passive update availability", () => {
+  it("shows a short sidebar pill for available provider updates", () => {
     expect(
       getProviderUpdateSidebarPillView([
         provider({ driver: driver("codex"), canUpdate: true }),
         provider({ driver: driver("cursor"), canUpdate: false }),
       ]),
-    ).toBeNull();
+    ).toMatchObject({
+      tone: "warning",
+      title: "2 updates",
+      dismissible: true,
+    });
+
+    expect(
+      getProviderUpdateSidebarPillView([provider({ driver: driver("codex"), canUpdate: true })]),
+    ).toMatchObject({
+      tone: "warning",
+      title: "Update Codex",
+      dismissible: true,
+    });
   });
 
   describe("multi-backend update outcomes", () => {

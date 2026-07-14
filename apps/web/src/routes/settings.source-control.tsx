@@ -1,7 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { SourceControlSettingsPanel } from "../components/settings/SourceControlSettings";
-
+/** Source Control settings UI was removed; defaults remain active in code. */
 export const Route = createFileRoute("/settings/source-control")({
-  component: SourceControlSettingsPanel,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/general", replace: true });
+  },
+  component: () => null,
 });

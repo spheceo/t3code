@@ -2,7 +2,9 @@
 
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
+import { useMemo, useRef } from "react";
 import { cn } from "~/lib/utils";
+import { useBaseUiMotion } from "~/lib/useBaseUiMotion";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 
@@ -19,10 +21,17 @@ function SheetClose(props: SheetPrimitive.Close.Props) {
 }
 
 function SheetBackdrop({ className, ...props }: SheetPrimitive.Backdrop.Props) {
+  const ref = useRef<HTMLDivElement>(null);
+  useBaseUiMotion(ref, {
+    open: { opacity: 1 },
+    closed: { opacity: 0 },
+  });
+
   return (
     <SheetPrimitive.Backdrop
+      ref={ref}
       className={cn(
-        "fixed inset-0 z-50 bg-background/60 backdrop-blur-xs transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
+        "fixed inset-0 z-50 bg-background/60 backdrop-blur-xs will-change-[opacity]",
         className,
       )}
       data-slot="sheet-backdrop"
@@ -57,6 +66,32 @@ function SheetViewport({
   );
 }
 
+function sheetMotionTargets(side: "right" | "left" | "top" | "bottom") {
+  switch (side) {
+    case "left":
+      return {
+        open: { opacity: 1, x: 0 },
+        closed: { opacity: 0, x: -32 },
+      } as const;
+    case "top":
+      return {
+        open: { opacity: 1, y: 0 },
+        closed: { opacity: 0, y: -32 },
+      } as const;
+    case "bottom":
+      return {
+        open: { opacity: 1, y: 0 },
+        closed: { opacity: 0, y: 32 },
+      } as const;
+    case "right":
+    default:
+      return {
+        open: { opacity: 1, x: 0 },
+        closed: { opacity: 0, x: 32 },
+      } as const;
+  }
+}
+
 function SheetPopup({
   className,
   children,
@@ -71,21 +106,23 @@ function SheetPopup({
   side?: "right" | "left" | "top" | "bottom";
   variant?: "default" | "inset";
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const targets = useMemo(() => sheetMotionTargets(side), [side]);
+  useBaseUiMotion(ref, targets);
+
   return (
     <SheetPortal keepMounted={keepMounted}>
       <SheetBackdrop />
       <SheetViewport side={side} variant={variant}>
         <SheetPrimitive.Popup
+          ref={ref}
           className={cn(
-            "relative flex max-h-full min-h-0 w-full min-w-0 flex-col bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 transition-[opacity,translate] duration-200 ease-in-out will-change-transform before:pointer-events-none before:absolute before:inset-0 before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:opacity-0 data-starting-style:opacity-0 max-sm:before:hidden dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
-            side === "bottom" &&
-              "row-start-2 border-t data-ending-style:translate-y-8 data-starting-style:translate-y-8",
-            side === "top" &&
-              "data-ending-style:-translate-y-8 data-starting-style:-translate-y-8 border-b",
-            side === "left" &&
-              "data-ending-style:-translate-x-8 data-starting-style:-translate-x-8 w-[calc(100%-(--spacing(12)))] max-w-md border-e",
+            "relative flex max-h-full min-h-0 w-full min-w-0 flex-col bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 will-change-[opacity,transform] before:pointer-events-none before:absolute before:inset-0 before:shadow-[0_1px_--theme(--color-black/4%)] max-sm:before:hidden dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+            side === "bottom" && "row-start-2 border-t",
+            side === "top" && "border-b",
+            side === "left" && "w-[calc(100%-(--spacing(12)))] max-w-md border-e",
             side === "right" &&
-              "col-start-2 w-[calc(100%-(--spacing(12)))] max-w-md border-s data-ending-style:translate-x-8 data-starting-style:translate-x-8",
+              "col-start-2 w-[calc(100%-(--spacing(12)))] max-w-md border-s",
             variant === "inset" &&
               "before:hidden sm:rounded-2xl sm:border sm:before:rounded-[calc(var(--radius-2xl)-1px)] sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-2xl)-1px)]",
             className,

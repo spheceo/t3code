@@ -1,7 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { ConnectionsSettings } from "../components/settings/ConnectionsSettings";
-
+/** Connections / remote SSH settings were removed; keep the path as a redirect. */
 export const Route = createFileRoute("/settings/connections")({
-  component: ConnectionsSettings,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/general", replace: true });
+  },
+  component: () => null,
 });

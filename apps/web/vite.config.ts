@@ -133,6 +133,10 @@ export default defineConfig(() => {
     resolve: {
       tsconfigPaths: true,
       dedupe: ["react", "react-dom"],
+      alias: {
+        // Hugeicons free-stroke shim (see src/icons/lucide-react.tsx)
+        "lucide-react": new URL("./src/icons/lucide-react.tsx", import.meta.url).pathname,
+      },
     },
     experimental: {
       bundledDev,

@@ -9,24 +9,6 @@ describe("parsePullRequestReference", () => {
     );
   });
 
-  it("accepts Azure DevOps pull request URLs", () => {
-    expect(
-      parsePullRequestReference("https://dev.azure.com/acme/project/_git/t3code/pullrequest/42"),
-    ).toBe("https://dev.azure.com/acme/project/_git/t3code/pullrequest/42");
-  });
-
-  it("accepts GitLab merge request URLs", () => {
-    expect(parsePullRequestReference("https://gitlab.com/group/project/-/merge_requests/42")).toBe(
-      "https://gitlab.com/group/project/-/merge_requests/42",
-    );
-  });
-
-  it("accepts legacy Azure DevOps pull request URLs", () => {
-    expect(
-      parsePullRequestReference("https://acme.visualstudio.com/project/_git/t3code/pullrequest/42"),
-    ).toBe("https://acme.visualstudio.com/project/_git/t3code/pullrequest/42");
-  });
-
   it("accepts raw numbers", () => {
     expect(parsePullRequestReference("42")).toBe("42");
   });
@@ -49,22 +31,18 @@ describe("parsePullRequestReference", () => {
     ).toBe("https://github.com/pingdotgg/t3code/pull/42");
   });
 
-  it("accepts glab mr checkout commands with raw numbers", () => {
-    expect(parsePullRequestReference("glab mr checkout 42")).toBe("42");
-  });
-
-  it("accepts az repos pr checkout commands with raw numbers", () => {
-    expect(parsePullRequestReference("az repos pr checkout --id 42")).toBe("42");
-  });
-
-  it("accepts az repos pr checkout commands with equals-style ids", () => {
-    expect(parsePullRequestReference("az repos pr checkout --id=42")).toBe("42");
-  });
-
-  it("accepts az repos pr checkout commands with extra flags", () => {
-    expect(parsePullRequestReference("az repos pr checkout --id 42 --remote-name origin")).toBe(
-      "42",
+  it("rejects non-GitHub provider URLs", () => {
+    expect(parsePullRequestReference("https://gitlab.com/group/project/-/merge_requests/42")).toBe(
+      null,
     );
+    expect(
+      parsePullRequestReference("https://dev.azure.com/acme/project/_git/t3code/pullrequest/42"),
+    ).toBe(null);
+  });
+
+  it("rejects non-GitHub CLI checkout commands", () => {
+    expect(parsePullRequestReference("glab mr checkout 42")).toBeNull();
+    expect(parsePullRequestReference("az repos pr checkout --id 42")).toBeNull();
   });
 
   it("rejects non-pull-request input", () => {

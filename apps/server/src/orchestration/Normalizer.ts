@@ -48,6 +48,41 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
         );
 
     if (command.type === "project.create") {
+      if (command.scratchChat === true) {
+        const chatRoot = path.join(serverConfig.chatsDir, command.projectId);
+        const scratchRoot = path.join(chatRoot, "scratch");
+        yield* fileSystem.makeDirectory(scratchRoot, { recursive: true }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestrationDispatchCommandError({
+                message: `Failed to create scratch chat workspace: ${cause.message}`,
+              }),
+          ),
+        );
+        const readmePath = path.join(chatRoot, "README.txt");
+        const readmeExists = yield* fileSystem.exists(readmePath).pipe(Effect.orElseSucceed(() => false));
+        if (!readmeExists) {
+          yield* fileSystem
+            .writeFileString(
+              readmePath,
+              [
+                "T3 Code — scratch chat workspace",
+                "",
+                "Agent session cwd is the scratch/ folder (writable sandbox).",
+                "Do not put secrets here. Chat → project promotion is planned later.",
+                "",
+              ].join("\n"),
+            )
+            .pipe(Effect.ignore);
+        }
+        return {
+          ...command,
+          workspaceRoot: scratchRoot,
+          createWorkspaceRootIfMissing: true,
+          scratchChat: true,
+        } satisfies OrchestrationCommand;
+      }
+
       return {
         ...command,
         workspaceRoot: yield* normalizeProjectWorkspaceRootForCreate(

@@ -22,7 +22,8 @@ function CollapsiblePanel({ className, ...props }: CollapsiblePrimitive.Panel.Pr
   return (
     <CollapsiblePrimitive.Panel
       className={cn(
-        "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 data-ending-style:h-0 data-starting-style:h-0 data-open:data-ending-style:[height:var(--collapsible-panel-height)]",
+        // Spring-matched ease (Motion overlay curve) — Base UI drives height via CSS vars.
+        "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none data-ending-style:h-0 data-starting-style:h-0 data-open:data-ending-style:[height:var(--collapsible-panel-height)]",
         className,
       )}
       data-slot="collapsible-panel"

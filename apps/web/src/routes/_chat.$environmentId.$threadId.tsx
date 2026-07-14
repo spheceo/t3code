@@ -62,7 +62,7 @@ function ChatThreadRouteView() {
   }
 
   return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
+    <SidebarInset className="min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground max-md:h-svh">
       <ChatView
         environmentId={threadRef.environmentId}
         threadId={threadRef.threadId}

@@ -1,4 +1,5 @@
 import { RouterProvider } from "@tanstack/react-router";
+import { MotionConfig } from "motion/react";
 
 import { ElectronBrowserHost } from "./browser/ElectronBrowserHost";
 import { PreviewAutomationHosts } from "./components/preview/PreviewAutomationHosts";
@@ -12,10 +13,12 @@ import type { AppRouter } from "./router";
  */
 export function AppRoot({ router }: { readonly router: AppRouter }) {
   return (
-    <AppAtomRegistryProvider>
-      <RouterProvider router={router} />
-      <PreviewAutomationHosts />
-      <ElectronBrowserHost />
-    </AppAtomRegistryProvider>
+    <MotionConfig reducedMotion="user">
+      <AppAtomRegistryProvider>
+        <RouterProvider router={router} />
+        <PreviewAutomationHosts />
+        <ElectronBrowserHost />
+      </AppAtomRegistryProvider>
+    </MotionConfig>
   );
 }

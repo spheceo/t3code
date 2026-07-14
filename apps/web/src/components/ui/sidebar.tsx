@@ -1,7 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
-import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
+import { LayoutAlignLeftIcon } from "lucide-react";
 import * as React from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
@@ -21,6 +21,10 @@ import { useIsMobile } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 import * as Schema from "effect/Schema";
+
+/** Motion-matched spring ease for CSS width/position (keeps resize via --sidebar-width). */
+const SIDEBAR_MOTION_EASE =
+  "duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -162,9 +166,10 @@ function SidebarProvider({
         )}
         data-sidebar-state={state}
         data-slot="sidebar-wrapper"
+        // Do not set --sidebar-width here — resize writes px on the element and
+        // React would reset it to 16rem on every provider re-render.
         style={
           {
-            "--sidebar-width": SIDEBAR_WIDTH,
             "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
             ...style,
           } as React.CSSProperties
@@ -266,6 +271,11 @@ function Sidebar({
     );
   }
 
+  // Cover mode (offcanvas): keep the sidebar mounted at left/right:0 under the
+  // main pane. The gap animates to 0 and SidebarInset paints over it — no slide
+  // off-screen, no unmount, so chrome text doesn't fight a transform.
+  const isOffcanvasCollapsed = state === "collapsed" && collapsible === "offcanvas";
+
   return (
     <SidebarInstanceContext value={instanceContextValue}>
       <div
@@ -276,10 +286,11 @@ function Sidebar({
         data-state={state}
         data-variant={variant}
       >
-        {/* This is what handles the sidebar gap on desktop */}
+        {/* Gap width tracks --sidebar-width so resize + collapse stay in sync */}
         <div
           className={cn(
-            "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+            "relative w-(--sidebar-width) bg-transparent transition-[width]",
+            SIDEBAR_MOTION_EASE,
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
@@ -290,10 +301,13 @@ function Sidebar({
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
-            side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+            "fixed inset-y-0 hidden h-svh w-(--sidebar-width) transition-[width] md:flex",
+            SIDEBAR_MOTION_EASE,
+            // Stay docked; main content covers us when the gap collapses.
+            side === "left" ? "left-0" : "right-0",
+            isOffcanvasCollapsed
+              ? "pointer-events-none z-0"
+              : "z-10",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -301,6 +315,7 @@ function Sidebar({
             className,
           )}
           data-slot="sidebar-container"
+          aria-hidden={isOffcanvasCollapsed || undefined}
           {...props}
         >
           <div
@@ -337,7 +352,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       variant="ghost"
       {...props}
     >
-      {isOpen ? <PanelLeftCloseIcon /> : <PanelLeftIcon />}
+      <LayoutAlignLeftIcon />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );
@@ -622,8 +637,15 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
       className={cn(
-        "relative flex min-w-0 w-full flex-1 flex-col bg-background",
-        "md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ms-2 md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ms-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm/5",
+        // z-10 + opaque bg so the main pane covers the docked sidebar when the
+        // offcanvas gap collapses (sidebar stays mounted underneath).
+        "relative z-10 flex min-h-0 min-w-0 w-full flex-1 flex-col bg-background",
+        // Inset: padded floating card when open; full-bleed when collapsed.
+        // Margin/radius/border track the same spring as the sidebar gap.
+        "md:peer-data-[variant=inset]:overflow-hidden md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:transition-[margin,border-radius,box-shadow,border-color]",
+        SIDEBAR_MOTION_EASE,
+        "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ms-0 md:peer-data-[variant=inset]:rounded-2xl md:peer-data-[variant=inset]:border-border/50 md:peer-data-[variant=inset]:shadow-sm/5",
+        "md:peer-data-[variant=inset]:peer-data-[state=collapsed]:m-0 md:peer-data-[variant=inset]:peer-data-[state=collapsed]:rounded-none md:peer-data-[variant=inset]:peer-data-[state=collapsed]:border-transparent md:peer-data-[variant=inset]:peer-data-[state=collapsed]:shadow-none",
         className,
       )}
       data-slot="sidebar-inset"
